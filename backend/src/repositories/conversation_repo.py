@@ -1,0 +1,42 @@
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.models.conversation import Conversation, Message
+from src.repositories.base import GenericRepository
+
+
+class ConversationRepository(GenericRepository):
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, Conversation)
+
+    async def get_user_conversations(self, user_id: int) -> list[Conversation]:
+        stmt = select(Conversation).where(Conversation.user_id == user_id).order_by(Conversation.updated_at.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_conversation_with_messages(self, conversation_id: int) -> Conversation | None:
+        stmt = (
+            select(Conversation)
+            .where(Conversation.id == conversation_id)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+
+class MessageRepository(GenericRepository):
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, Message)
+
+    async def get_conversation_messages(self, conversation_id: int) -> list[Message]:
+        stmt = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_messages(self, conversation_id: int) -> int:
+        stmt = select(func.count()).select_from(Message).where(Message.conversation_id == conversation_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
