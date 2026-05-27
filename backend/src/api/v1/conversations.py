@@ -16,16 +16,14 @@ async def list_conversations(
     current_user: User = Depends(get_current_user),
 ):
     conv_repo = ConversationRepository(db)
-    msg_repo = MessageRepository(db)
-    convs = await conv_repo.get_user_conversations(user_id=current_user.id)
-    result = []
-    for c in convs:
-        count = await msg_repo.count_messages(c.id)
-        result.append(ConversationResponse(
+    rows = await conv_repo.get_user_conversations_with_counts(user_id=current_user.id)
+    return [
+        ConversationResponse(
             id=c.id, title=c.title, created_at=c.created_at,
             updated_at=c.updated_at, message_count=count,
-        ))
-    return result
+        )
+        for c, count in rows
+    ]
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import get_current_user
@@ -9,6 +9,14 @@ from src.schemas.document import DocumentChunkResponse, DocumentListResponse, Do
 from src.services.document_service import delete_document, process_document_upload, upload_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+async def _get_owned_document(db: AsyncSession, document_id: int, user_id: int):
+    repo = DocumentRepository(db)
+    doc = await repo.get(document_id)
+    if not doc or doc.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return doc
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -26,10 +34,11 @@ async def upload(
             id=doc.id, filename=doc.filename, file_type=doc.file_type,
             status=doc.status, chunk_count=doc.chunk_count, created_at=doc.created_at,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("upload_failed", error=str(e), type=type(e).__name__)
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Upload failed")
 
 
 @router.post("/{document_id}/process")
@@ -38,6 +47,7 @@ async def process_doc(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _get_owned_document(db, document_id, current_user.id)
     result = await process_document_upload(db, document_id)
     return result
 
@@ -67,6 +77,7 @@ async def get_chunks(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _get_owned_document(db, document_id, current_user.id)
     from src.repositories.document_repo import DocumentChunkRepository
     repo = DocumentChunkRepository(db)
     chunks = await repo.get_document_chunks(document_id)
@@ -79,5 +90,6 @@ async def delete_doc(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _get_owned_document(db, document_id, current_user.id)
     success = await delete_document(db, document_id)
     return {"success": success}

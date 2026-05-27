@@ -1,3 +1,5 @@
+import asyncio
+
 from src.agents.state import RAGState
 from src.retrieval.hybrid import hybrid_search
 from src.core.config import get_settings
@@ -13,12 +15,20 @@ async def retriever_agent(state: RAGState) -> dict:
     expanded_queries = state.get("expanded_queries", [rewritten_query])
     settings = get_settings()
 
-    all_results = {}
-
     # Always include original query to avoid losing good matches from bad rewrites
     queries = list(dict.fromkeys([original_query, rewritten_query] + expanded_queries))
-    for q in queries:
-        results = await hybrid_search(q, top_k=settings.RETRIEVAL_TOP_K)
+
+    # Run all searches concurrently
+    search_results = await asyncio.gather(
+        *[hybrid_search(q, top_k=settings.RETRIEVAL_TOP_K) for q in queries],
+        return_exceptions=True,
+    )
+
+    all_results = {}
+    for results in search_results:
+        if isinstance(results, Exception):
+            logger.warning("search_failed", error=str(results))
+            continue
         for r in results:
             key = r.get("chunk_id") or r.get("doc_id")
             if key and key not in all_results:

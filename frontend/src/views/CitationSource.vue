@@ -1,13 +1,10 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted } from 'vue'
 import { useConversationsStore } from '../stores/conversations'
 
 const props = defineProps({
   messageId: { type: [String, Number], required: true },
 })
-
-const route = useRoute()
 const convStore = useConversationsStore()
 const loading = ref(true)
 const citations = ref([])

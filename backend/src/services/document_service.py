@@ -5,6 +5,7 @@ import uuid
 import fitz
 import chardet
 from docx import Document as DocxDocument
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.document import Document, DocumentChunk
@@ -18,9 +19,13 @@ logger = structlog.get_logger()
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md", "csv", "json", "html"}
+
 
 async def upload_document(session: AsyncSession, user_id: int, filename: str, file_content: bytes) -> Document:
     file_type = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
+    if file_type not in ALLOWED_FILE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}. Allowed: {', '.join(sorted(ALLOWED_FILE_TYPES))}")
     file_id = uuid.uuid4().hex
     file_path = os.path.join(UPLOAD_DIR, f"{file_id}.{file_type}")
 

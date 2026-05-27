@@ -21,15 +21,24 @@ def _extract_text(content) -> str:
     return ""
 
 
+_llm: ChatAnthropic | None = None
+
+
 def get_llm() -> ChatAnthropic:
+    global _llm
+    if _llm is not None:
+        return _llm
     settings = get_settings()
-    return ChatAnthropic(
+    _llm = ChatAnthropic(
         api_key=settings.LLM_API_KEY,
         base_url=settings.LLM_BASE_URL,
         model=settings.LLM_MODEL,
         temperature=settings.LLM_TEMPERATURE,
         max_tokens=settings.LLM_MAX_TOKENS,
+        timeout=60,
+        max_retries=1,
     )
+    return _llm
 
 
 async def planner_agent(state: RAGState) -> dict:

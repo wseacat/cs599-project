@@ -1,6 +1,8 @@
 import json
 import time
 
+from fastapi import HTTPException, status
+from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agents.state import RAGState
@@ -22,6 +24,8 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
 
     if conversation_id:
         conversation = await conv_repo.get(conversation_id)
+        if not conversation or conversation.user_id != user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
     else:
         conversation = Conversation(user_id=user_id, title=message[:50])
         conversation = await conv_repo.create(conversation)
@@ -32,7 +36,6 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
     history_data = await get_history(conversation.id)
     chat_history = []
     for h in history_data:
-        from langchain_core.messages import AIMessage, HumanMessage
         if h["role"] == "user":
             chat_history.append(HumanMessage(content=h["content"]))
         else:
@@ -58,7 +61,11 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
 
     rag_app = get_rag_app()
     t0 = time.time()
-    result = await rag_app.ainvoke(initial_state)
+    try:
+        result = await rag_app.ainvoke(initial_state)
+    except Exception as e:
+        logger.error("workflow_failed", error=str(e), query=message[:50])
+        raise HTTPException(status_code=500, detail="Chat processing failed")
     elapsed = time.time() - t0
     logger.info("workflow_complete", elapsed=f"{elapsed:.1f}s", query=message[:50])
 
@@ -70,21 +77,23 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
     )
     ai_message = await msg_repo.create(ai_message)
 
+    # Batch insert citations
     citations = result.get("citations", [])
-    citation_repo = CitationRepository(session)
+    citation_objs = []
     for c in citations:
         doc_id = c.get("document_id", 0)
         chunk_id = c.get("chunk_id", 0)
         if not doc_id or not chunk_id:
             continue
-        citation = Citation(
+        citation_objs.append(Citation(
             message_id=ai_message.id,
             document_id=doc_id,
             chunk_id=chunk_id,
             page=c.get("page"),
             snippet=c.get("snippet"),
-        )
-        await citation_repo.create(citation)
+        ))
+    if citation_objs:
+        session.add_all(citation_objs)
 
     retrieval_log = RetrievalLog(
         message_id=ai_message.id,
@@ -94,8 +103,7 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
         reranked_docs=json.dumps(result.get("reranked_documents", []), ensure_ascii=False, default=str),
         reflection_result=result.get("reflection_result", ""),
     )
-    log_repo = RetrievalLogRepository(session)
-    await log_repo.create(retrieval_log)
+    session.add(retrieval_log)
 
     await session.commit()
     await save_message(conversation.id, "assistant", result.get("final_answer", ""))

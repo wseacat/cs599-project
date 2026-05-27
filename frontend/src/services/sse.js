@@ -10,6 +10,7 @@
 export function streamChat(message, conversationId, { onToken, onFinal, onError }) {
   const controller = new AbortController()
   const token = localStorage.getItem('rag_token')
+  let settled = false
 
   fetch('/api/chat/stream', {
     method: 'POST',
@@ -49,7 +50,11 @@ export function streamChat(message, conversationId, { onToken, onFinal, onError 
               if (eventType === 'token') {
                 onToken?.(parsed)
               } else if (eventType === 'final') {
+                settled = true
                 onFinal?.(parsed)
+              } else if (eventType === 'error') {
+                settled = true
+                onError?.(new Error(parsed.detail || parsed.message || 'Stream error'))
               }
             } catch {
               // non-JSON data line, skip
@@ -60,9 +65,14 @@ export function streamChat(message, conversationId, { onToken, onFinal, onError 
           }
         }
       }
+
+      // Stream ended without a final event
+      if (!settled) {
+        onError?.(new Error('Stream ended unexpectedly'))
+      }
     })
     .catch((err) => {
-      if (err.name !== 'AbortError') {
+      if (err.name !== 'AbortError' && !settled) {
         onError?.(err)
       }
     })

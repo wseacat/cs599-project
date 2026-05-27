@@ -61,14 +61,14 @@ async function handleSubmit() {
         <button
           class="flex-1 py-2 text-sm rounded-md transition-colors"
           :class="!isRegister ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
-          @click="isRegister = false"
+          @click="isRegister = false; error = ''"
         >
           登录
         </button>
         <button
           class="flex-1 py-2 text-sm rounded-md transition-colors"
           :class="isRegister ? 'bg-white shadow text-gray-900' : 'text-gray-500'"
-          @click="isRegister = true"
+          @click="isRegister = true; error = ''"
         >
           注册
         </button>

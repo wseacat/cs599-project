@@ -14,6 +14,17 @@ class ConversationRepository(GenericRepository):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_user_conversations_with_counts(self, user_id: int) -> list[tuple[Conversation, int]]:
+        stmt = (
+            select(Conversation, func.count(Message.id).label("msg_count"))
+            .outerjoin(Message, Message.conversation_id == Conversation.id)
+            .where(Conversation.user_id == user_id)
+            .group_by(Conversation.id)
+            .order_by(Conversation.updated_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.all())
+
     async def get_conversation_with_messages(self, conversation_id: int) -> Conversation | None:
         stmt = (
             select(Conversation)

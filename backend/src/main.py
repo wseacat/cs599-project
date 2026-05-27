@@ -77,7 +77,8 @@ async def global_exception_handler(request, exc):
     import traceback
     logger.error("unhandled_exception", path=str(request.url), method=request.method, error=str(exc), traceback=traceback.format_exc())
     from fastapi.responses import JSONResponse
-    return JSONResponse(status_code=500, content={"detail": str(exc)})
+    detail = str(exc) if settings.APP_ENV == "development" else "Internal server error"
+    return JSONResponse(status_code=500, content={"detail": detail})
 
 
 if __name__ == "__main__":

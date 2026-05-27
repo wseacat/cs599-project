@@ -51,17 +51,23 @@ async def clear_history(conversation_id: int) -> None:
 
 
 async def cache_retrieval(query_hash: str, results: list[dict], ttl: int = 3600) -> None:
-    redis = await get_redis()
-    key = f"retrieval:{query_hash}"
-    await redis.setex(key, ttl, json.dumps(results, ensure_ascii=False))
+    try:
+        redis = await get_redis()
+        key = f"retrieval:{query_hash}"
+        await redis.setex(key, ttl, json.dumps(results, ensure_ascii=False))
+    except Exception:
+        logger.warning("redis_cache_retrieval_failed", query_hash=query_hash)
 
 
 async def get_cached_retrieval(query_hash: str) -> list[dict] | None:
-    redis = await get_redis()
-    key = f"retrieval:{query_hash}"
-    data = await redis.get(key)
-    if data:
-        return json.loads(data)
+    try:
+        redis = await get_redis()
+        key = f"retrieval:{query_hash}"
+        data = await redis.get(key)
+        if data:
+            return json.loads(data)
+    except Exception:
+        logger.warning("redis_get_cached_retrieval_failed", query_hash=query_hash)
     return None
 
 

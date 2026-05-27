@@ -28,15 +28,6 @@ api.interceptors.response.use(
   },
 )
 
-// Auth
-export const loginApi = (username, password) =>
-  api.post('/auth/login', { username, password })
-
-export const registerApi = (username, email, password) =>
-  api.post('/auth/register', { username, email, password })
-
-export const getMe = () => api.get('/auth/me')
-
 // Documents
 export const uploadDocument = (file) => {
   const form = new FormData()

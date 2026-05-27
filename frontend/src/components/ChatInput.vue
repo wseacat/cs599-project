@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 
 const emit = defineEmits(['send'])
 const props = defineProps({
@@ -7,12 +7,19 @@ const props = defineProps({
 })
 
 const input = ref('')
+let textareaEl = null
 
 function handleSend() {
   const text = input.value.trim()
   if (!text || props.disabled) return
   emit('send', text)
   input.value = ''
+  // Reset textarea height after DOM update
+  nextTick(() => {
+    if (textareaEl) {
+      textareaEl.style.height = 'auto'
+    }
+  })
 }
 
 function handleKeydown(e) {
@@ -33,7 +40,7 @@ function handleKeydown(e) {
         placeholder="输入关于文档的问题..."
         :disabled="disabled"
         @keydown="handleKeydown"
-        @input="$event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px'"
+        @input="$event.target.style.height = 'auto'; $event.target.style.height = $event.target.scrollHeight + 'px'; textareaEl = $event.target"
       />
       <button
         class="btn-primary px-4 py-3 rounded-xl flex-shrink-0"

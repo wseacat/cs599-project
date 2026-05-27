@@ -1,14 +1,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
 import { getRetrievalDebug } from '../services/api'
 import RetrievalStep from '../components/RetrievalStep.vue'
 
 const props = defineProps({
   messageId: { type: [String, Number], required: true },
 })
-
-const route = useRoute()
 const debug = ref(null)
 const loading = ref(true)
 const error = ref(null)

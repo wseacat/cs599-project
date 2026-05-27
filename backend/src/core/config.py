@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
-    SECRET_KEY: str = "dev-secret-key"
+    SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     REDIS_TTL: int = 1800
 
     # Database
-    DATABASE_URL: str = "mysql+aiomysql://root:lt946894@localhost:3306/enterprise_rag"
+    DATABASE_URL: str = ""
 
     # Retrieval
     RETRIEVAL_TOP_K: int = 10
@@ -78,4 +78,11 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    if not s.DATABASE_URL:
+        raise ValueError("DATABASE_URL is required. Set it in .env or environment variables.")
+    if not s.SECRET_KEY:
+        raise ValueError("SECRET_KEY is required. Set it in .env or environment variables.")
+    if not s.LLM_API_KEY:
+        raise ValueError("LLM_API_KEY is required. Set it in .env or environment variables.")
+    return s

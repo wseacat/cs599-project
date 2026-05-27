@@ -94,10 +94,15 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function loadMessages(msgs) {
-    messages.value = msgs.map((m) => ({
-      ...m,
-      citations: m.citations_json ? JSON.parse(m.citations_json) : [],
-    }))
+    messages.value = msgs.map((m) => {
+      let citations = []
+      try {
+        citations = m.citations_json ? JSON.parse(m.citations_json) : []
+      } catch {
+        citations = []
+      }
+      return { ...m, citations }
+    })
   }
 
   function clearMessages() {

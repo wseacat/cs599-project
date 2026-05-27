@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import * as api from '../services/api'
 
 export const useDocumentsStore = defineStore('documents', () => {
@@ -7,7 +7,7 @@ export const useDocumentsStore = defineStore('documents', () => {
   const total = ref(0)
   const loading = ref(false)
   const uploading = ref(false)
-  const processingIds = ref(new Set())
+  const processingIds = reactive(new Set())
 
   async function fetchDocuments() {
     loading.value = true
@@ -33,18 +33,21 @@ export const useDocumentsStore = defineStore('documents', () => {
   }
 
   async function processDocument(documentId) {
-    processingIds.value.add(documentId)
+    processingIds.add(documentId)
     try {
       const { data } = await api.processDocument(documentId)
-      // Update local state
       const doc = documents.value.find((d) => d.id === documentId)
       if (doc) {
         doc.status = data.error ? 'failed' : 'completed'
         doc.chunk_count = data.chunk_count || 0
       }
       return data
+    } catch (err) {
+      const doc = documents.value.find((d) => d.id === documentId)
+      if (doc) doc.status = 'failed'
+      throw err
     } finally {
-      processingIds.value.delete(documentId)
+      processingIds.delete(documentId)
     }
   }
 
