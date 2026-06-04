@@ -1,48 +1,24 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useConversationsStore } from '../stores/conversations'
+import { getMessage } from '../services/api'
 
 const props = defineProps({
   messageId: { type: [String, Number], required: true },
 })
-const convStore = useConversationsStore()
 const loading = ref(true)
 const citations = ref([])
 const message = ref(null)
+const error = ref(null)
 
-// We need to find the message and its citations from conversation data
-// The message's citations_json field contains the citation data
 onMounted(async () => {
   try {
-    // Try to get from current conversation messages
-    const conv = convStore.currentConversation
-    if (conv?.messages) {
-      const msg = conv.messages.find((m) => m.id === Number(props.messageId))
-      if (msg) {
-        message.value = msg
-        if (msg.citations_json) {
-          citations.value = JSON.parse(msg.citations_json)
-        }
-      }
-    }
-
-    // If no citations found, try fetching all conversations to find the message
-    if (!citations.value.length) {
-      await convStore.fetchConversations()
-      for (const convSummary of convStore.conversations) {
-        const detail = await convStore.fetchConversation(convSummary.id)
-        const msg = detail.messages?.find((m) => m.id === Number(props.messageId))
-        if (msg) {
-          message.value = msg
-          if (msg.citations_json) {
-            citations.value = JSON.parse(msg.citations_json)
-          }
-          break
-        }
-      }
+    const { data } = await getMessage(props.messageId)
+    message.value = data
+    if (data.citations_json) {
+      citations.value = JSON.parse(data.citations_json)
     }
   } catch (err) {
-    console.error('Failed to load citations:', err)
+    error.value = err.message || 'Failed to load message'
   } finally {
     loading.value = false
   }
@@ -67,6 +43,11 @@ onMounted(async () => {
       <!-- Loading -->
       <div v-if="loading" class="text-center py-12">
         <div class="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto" />
+      </div>
+
+      <!-- Error -->
+      <div v-else-if="error" class="card text-center py-8">
+        <p class="text-red-600">{{ error }}</p>
       </div>
 
       <!-- Original message -->
@@ -116,7 +97,7 @@ onMounted(async () => {
       </div>
 
       <!-- Empty state -->
-      <div v-else-if="!loading" class="text-center py-12 text-gray-500">
+      <div v-else-if="!loading && !error" class="text-center py-12 text-gray-500">
         <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
             d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"

@@ -7,6 +7,10 @@ from src.models.user import User
 from src.repositories.conversation_repo import ConversationRepository, MessageRepository
 from src.schemas.chat import ConversationDetailResponse, ConversationResponse, MessageResponse
 
+import structlog
+
+logger = structlog.get_logger()
+
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
@@ -45,14 +49,40 @@ async def get_conversation(
     )
 
 
+@router.get("/messages/{message_id}", response_model=MessageResponse)
+async def get_message(
+    message_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a single message by ID (with ownership check)."""
+    msg_repo = MessageRepository(db)
+    conv_repo = ConversationRepository(db)
+
+    message = await msg_repo.get(message_id)
+    if not message:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+    # Verify ownership
+    conv = await conv_repo.get(message.conversation_id)
+    if not conv or conv.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+    return MessageResponse(
+        id=message.id,
+        role=message.role,
+        content=message.content,
+        citations_json=message.citations_json,
+        created_at=message.created_at,
+    )
+
+
 @router.delete("/{conversation_id}")
 async def delete_conversation(
     conversation_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    import structlog
-    logger = structlog.get_logger()
     try:
         from src.memory.conversation_memory import clear_history
         conv_repo = ConversationRepository(db)

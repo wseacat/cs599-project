@@ -36,6 +36,8 @@ api.interceptors.response.use(
       error.message = '请求的资源不存在'
     } else if (response?.status === 422) {
       error.message = '请求参数错误'
+    } else if (response?.status === 413) {
+      error.message = '文件过大'
     } else if (!response) {
       error.message = '网络连接失败，请检查网络'
     }
@@ -73,6 +75,9 @@ export const listConversations = () => api.get('/conversations/')
 
 export const getConversation = (conversationId) =>
   api.get(`/conversations/${conversationId}`)
+
+export const getMessage = (messageId) =>
+  api.get(`/conversations/messages/${messageId}`)
 
 export const deleteConversation = (conversationId) =>
   api.delete(`/conversations/${conversationId}`)
