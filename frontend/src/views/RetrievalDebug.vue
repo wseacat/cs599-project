@@ -37,6 +37,12 @@ function parseDocs(raw) {
   }
   return raw
 }
+
+function formatDuration(ms) {
+  if (!ms) return ''
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
 </script>
 
 <template>
@@ -70,22 +76,6 @@ function parseDocs(raw) {
         <div class="card">
           <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">查询</h2>
           <p class="text-gray-900">{{ debug.query }}</p>
-          <div v-if="debug.rewritten_query && debug.rewritten_query !== debug.query" class="mt-2">
-            <span class="text-xs text-gray-500">改写：</span>
-            <p class="text-sm text-gray-700">{{ debug.rewritten_query }}</p>
-          </div>
-          <div v-if="debug.expanded_queries?.length" class="mt-2">
-            <span class="text-xs text-gray-500">扩展：</span>
-            <div class="flex flex-wrap gap-1 mt-1">
-              <span
-                v-for="(q, i) in debug.expanded_queries"
-                :key="i"
-                class="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded"
-              >
-                {{ q }}
-              </span>
-            </div>
-          </div>
         </div>
 
         <!-- Plan -->
@@ -99,28 +89,31 @@ function parseDocs(raw) {
 
         <!-- Retrieved Documents -->
         <RetrievalStep
-          title="检索到的文档"
+          :title="`检索到的文档 (${debug.retrieved_count || parseDocs(debug.retrieved_docs).length})`"
           :expanded="expandedSteps.retrieved"
           @toggle="toggleStep('retrieved')"
         >
           <div class="space-y-2">
             <div
-              v-for="(doc, i) in parseDocs(debug.retrieved_documents)"
+              v-for="(doc, i) in parseDocs(debug.retrieved_docs)"
               :key="i"
               class="bg-gray-50 rounded-lg p-3 border border-gray-200"
             >
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-xs font-medium text-primary-600">#{{ i + 1 }}</span>
                 <span class="text-xs text-gray-500">
-                  得分：{{ doc.score?.toFixed(4) || 'N/A' }}
+                  得分：{{ doc.score?.toFixed(4) || doc.rrf_score?.toFixed(4) || 'N/A' }}
                 </span>
                 <span v-if="doc.document_id" class="text-xs text-gray-400">
                   文档 #{{ doc.document_id }}
                 </span>
+                <span v-if="doc.source" class="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">
+                  {{ doc.source }}
+                </span>
               </div>
               <p class="text-xs text-gray-700 line-clamp-3">{{ doc.content }}</p>
             </div>
-            <p v-if="!parseDocs(debug.retrieved_documents).length" class="text-sm text-gray-500">
+            <p v-if="!parseDocs(debug.retrieved_docs).length" class="text-sm text-gray-500">
               未检索到文档
             </p>
           </div>
@@ -128,25 +121,28 @@ function parseDocs(raw) {
 
         <!-- Reranked Documents -->
         <RetrievalStep
-          title="重排后的文档"
+          :title="`重排后的文档 (${debug.reranked_count || parseDocs(debug.reranked_docs).length})`"
           :expanded="expandedSteps.reranked"
           @toggle="toggleStep('reranked')"
         >
           <div class="space-y-2">
             <div
-              v-for="(doc, i) in parseDocs(debug.reranked_documents)"
+              v-for="(doc, i) in parseDocs(debug.reranked_docs)"
               :key="i"
               class="bg-gray-50 rounded-lg p-3 border border-gray-200"
             >
               <div class="flex items-center gap-2 mb-1">
                 <span class="text-xs font-medium text-green-600">#{{ i + 1 }}</span>
                 <span class="text-xs text-gray-500">
-                  得分：{{ doc.score?.toFixed(4) || 'N/A' }}
+                  得分：{{ doc.rerank_score?.toFixed(4) || doc.score?.toFixed(4) || 'N/A' }}
+                </span>
+                <span v-if="doc.document_id" class="text-xs text-gray-400">
+                  文档 #{{ doc.document_id }}
                 </span>
               </div>
               <p class="text-xs text-gray-700 line-clamp-3">{{ doc.content }}</p>
             </div>
-            <p v-if="!parseDocs(debug.reranked_documents).length" class="text-sm text-gray-500">
+            <p v-if="!parseDocs(debug.reranked_docs).length" class="text-sm text-gray-500">
               无重排文档
             </p>
           </div>
@@ -161,14 +157,11 @@ function parseDocs(raw) {
           <div class="flex items-center gap-2">
             <span
               class="text-xs px-2 py-1 rounded-full font-medium"
-              :class="debug.reflection_result?.startsWith('passed')
+              :class="debug.reflection_result?.includes('pass')
                 ? 'bg-green-100 text-green-800'
                 : 'bg-yellow-100 text-yellow-800'"
             >
               {{ debug.reflection_result || 'N/A' }}
-            </span>
-            <span v-if="debug.retry_count" class="text-xs text-gray-500">
-              重试次数：{{ debug.retry_count }}
             </span>
           </div>
         </RetrievalStep>
