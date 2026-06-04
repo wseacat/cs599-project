@@ -64,7 +64,7 @@ onMounted(async () => {
         <div class="flex items-center gap-2">
           <span v-if="chatStore.isStreaming" class="text-xs text-primary-600 flex items-center gap-1">
             <span class="w-2 h-2 bg-primary-600 rounded-full animate-pulse" />
-            思考中...
+            {{ chatStore.currentAgent ? `正在执行: ${chatStore.currentAgent}` : '思考中...' }}
           </span>
           <button
             v-if="chatStore.isStreaming"
@@ -105,8 +105,8 @@ onMounted(async () => {
           :message="msg"
         />
 
-        <!-- Streaming message -->
-        <div v-if="chatStore.isStreaming && chatStore.streamingText" class="flex gap-3 justify-start">
+        <!-- Streaming message with workflow progress -->
+        <div v-if="chatStore.isStreaming" class="flex gap-3 justify-start">
           <div class="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center flex-shrink-0">
             <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -115,12 +115,49 @@ onMounted(async () => {
             </svg>
           </div>
           <div class="bg-white border border-gray-200 shadow-sm rounded-2xl rounded-bl-md px-4 py-3 max-w-[75%]">
-            <p class="text-sm whitespace-pre-wrap">{{ chatStore.streamingText }}</p>
+            <!-- Workflow progress indicator -->
+            <div v-if="chatStore.workflowProgress.length > 0 && !chatStore.streamingText" class="space-y-2">
+              <div
+                v-for="(step, idx) in chatStore.workflowProgress"
+                :key="idx"
+                class="flex items-center gap-2 text-xs"
+              >
+                <span class="w-4 h-4 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+                <span class="text-gray-600">
+                  <template v-if="step.agent === 'planner'">分析问题</template>
+                  <template v-else-if="step.agent === 'query_agent'">优化查询</template>
+                  <template v-else-if="step.agent === 'retriever'">检索文档 ({{ step.doc_count || 0 }} 个结果)</template>
+                  <template v-else-if="step.agent === 'rerank'">重排序</template>
+                  <template v-else-if="step.agent === 'reflection'">{{ step.passed ? '质量检查通过' : '正在重试...' }}</template>
+                  <template v-else-if="step.agent === 'answer'">生成答案</template>
+                  <template v-else>{{ step.agent }}</template>
+                </span>
+              </div>
+              <!-- Current step indicator -->
+              <div v-if="chatStore.currentAgent" class="flex items-center gap-2 text-xs text-primary-600">
+                <span class="w-4 h-4 border-2 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+                <span>
+                  <template v-if="chatStore.currentAgent === 'planner'">正在分析问题...</template>
+                  <template v-else-if="chatStore.currentAgent === 'query_agent'">正在优化查询...</template>
+                  <template v-else-if="chatStore.currentAgent === 'retriever'">正在检索文档...</template>
+                  <template v-else-if="chatStore.currentAgent === 'rerank'">正在重排序...</template>
+                  <template v-else-if="chatStore.currentAgent === 'reflection'">正在评估质量...</template>
+                  <template v-else-if="chatStore.currentAgent === 'answer'">正在生成答案...</template>
+                  <template v-else>正在处理...</template>
+                </span>
+              </div>
+            </div>
+            <!-- Streaming text -->
+            <p v-else class="text-sm whitespace-pre-wrap">{{ chatStore.streamingText }}</p>
           </div>
         </div>
 
-        <!-- Loading indicator -->
-        <div v-if="chatStore.isStreaming && !chatStore.streamingText" class="flex gap-3 justify-start">
+        <!-- Loading indicator (before any progress) -->
+        <div v-if="chatStore.isStreaming && !chatStore.streamingText && !chatStore.workflowProgress.length" class="flex gap-3 justify-start">
           <div class="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center flex-shrink-0">
             <svg class="w-4 h-4 text-white animate-spin" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />

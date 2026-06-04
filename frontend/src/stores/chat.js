@@ -8,6 +8,8 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref([])
   const streamingText = ref('')
   const isStreaming = ref(false)
+  const currentAgent = ref('')
+  const workflowProgress = ref([])
   const error = ref(null)
   let abortController = null
 
@@ -57,15 +59,37 @@ export const useChatStore = defineStore('chat', () => {
   function sendStreaming(content, conversationId) {
     isStreaming.value = true
     streamingText.value = ''
+    currentAgent.value = ''
+    workflowProgress.value = []
 
     return new Promise((resolve, reject) => {
       abortController = streamChat(content, conversationId, {
+        onProgress(progressData) {
+          currentAgent.value = progressData.agent || ''
+          workflowProgress.value.push(progressData)
+
+          // Update streaming text based on agent progress
+          if (progressData.agent === 'answer') {
+            streamingText.value = '正在生成答案...'
+          } else if (progressData.agent === 'planner') {
+            streamingText.value = '正在分析问题...'
+          } else if (progressData.agent === 'query_agent') {
+            streamingText.value = '正在优化查询...'
+          } else if (progressData.agent === 'retriever') {
+            streamingText.value = `正在检索文档 (${progressData.doc_count || 0} 个结果)...`
+          } else if (progressData.agent === 'rerank') {
+            streamingText.value = '正在重排序...'
+          } else if (progressData.agent === 'reflection') {
+            streamingText.value = progressData.passed ? '检索质量良好' : '正在重试检索...'
+          }
+        },
         onToken(tokenData) {
           streamingText.value = tokenData.text || ''
         },
         onFinal(finalData) {
           isStreaming.value = false
           streamingText.value = ''
+          currentAgent.value = ''
           addAssistantMessage(
             finalData.answer,
             finalData.citations,
@@ -80,6 +104,7 @@ export const useChatStore = defineStore('chat', () => {
         onError(err) {
           isStreaming.value = false
           streamingText.value = ''
+          currentAgent.value = ''
           error.value = err.message
           reject(err)
         },
@@ -91,6 +116,7 @@ export const useChatStore = defineStore('chat', () => {
     abortController?.abort()
     isStreaming.value = false
     streamingText.value = ''
+    currentAgent.value = ''
   }
 
   function loadMessages(msgs) {
@@ -108,6 +134,8 @@ export const useChatStore = defineStore('chat', () => {
   function clearMessages() {
     messages.value = []
     streamingText.value = ''
+    currentAgent.value = ''
+    workflowProgress.value = []
     error.value = null
   }
 
@@ -115,6 +143,8 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     streamingText,
     isStreaming,
+    currentAgent,
+    workflowProgress,
     error,
     sendMessage,
     cancelStream,

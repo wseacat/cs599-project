@@ -2,12 +2,18 @@
  * Connect to the SSE streaming chat endpoint.
  * POST /api/chat/stream with fetch, parse SSE events.
  *
+ * Supports event types:
+ * - progress: agent workflow progress updates
+ * - token: answer text chunks
+ * - final: complete result with citations
+ * - error: error messages
+ *
  * @param {string} message
  * @param {number|null} conversationId
- * @param {object} callbacks - { onToken, onFinal, onError }
+ * @param {object} callbacks - { onProgress, onToken, onFinal, onError }
  * @returns {AbortController} - call .abort() to cancel
  */
-export function streamChat(message, conversationId, { onToken, onFinal, onError }) {
+export function streamChat(message, conversationId, { onProgress, onToken, onFinal, onError }) {
   const controller = new AbortController()
   const token = localStorage.getItem('rag_token')
   let settled = false
@@ -47,7 +53,9 @@ export function streamChat(message, conversationId, { onToken, onFinal, onError 
             if (!data) continue
             try {
               const parsed = JSON.parse(data)
-              if (eventType === 'token') {
+              if (eventType === 'progress') {
+                onProgress?.(parsed)
+              } else if (eventType === 'token') {
                 onToken?.(parsed)
               } else if (eventType === 'final') {
                 settled = true

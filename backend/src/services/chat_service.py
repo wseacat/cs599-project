@@ -1,5 +1,6 @@
 import json
 import time
+import asyncio
 
 from fastapi import HTTPException, status
 from langchain_core.messages import AIMessage, HumanMessage
@@ -18,30 +19,9 @@ import structlog
 logger = structlog.get_logger()
 
 
-async def chat(session: AsyncSession, user_id: int, message: str, conversation_id: int | None = None) -> dict:
-    conv_repo = ConversationRepository(session)
-    msg_repo = MessageRepository(session)
-
-    if conversation_id:
-        conversation = await conv_repo.get(conversation_id)
-        if not conversation or conversation.user_id != user_id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    else:
-        conversation = Conversation(user_id=user_id, title=message[:50])
-        conversation = await conv_repo.create(conversation)
-        await session.commit()
-
-    await save_message(conversation.id, "user", message)
-
-    history_data = await get_history(conversation.id)
-    chat_history = []
-    for h in history_data:
-        if h["role"] == "user":
-            chat_history.append(HumanMessage(content=h["content"]))
-        else:
-            chat_history.append(AIMessage(content=h["content"]))
-
-    initial_state: RAGState = {
+def _build_initial_state(message: str, chat_history: list, conversation_id: int) -> RAGState:
+    """Build the initial RAG state for a chat request."""
+    return {
         "original_query": message,
         "rewritten_query": "",
         "expanded_queries": [],
@@ -54,20 +34,42 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
         "final_answer": "",
         "citations": [],
         "chat_history": chat_history,
-        "conversation_id": conversation.id,
+        "conversation_id": conversation_id,
         "message_id": None,
         "workflow_trace": [],
     }
 
-    rag_app = get_rag_app()
-    t0 = time.time()
-    try:
-        result = await rag_app.ainvoke(initial_state)
-    except Exception as e:
-        logger.error("workflow_failed", error=str(e), query=message[:50])
-        raise HTTPException(status_code=500, detail="Chat processing failed")
-    elapsed = time.time() - t0
-    logger.info("workflow_complete", elapsed=f"{elapsed:.1f}s", query=message[:50])
+
+async def _get_or_create_conversation(session: AsyncSession, user_id: int, conversation_id: int | None, message: str) -> Conversation:
+    """Get existing conversation or create a new one."""
+    conv_repo = ConversationRepository(session)
+    if conversation_id:
+        conversation = await conv_repo.get(conversation_id)
+        if not conversation or conversation.user_id != user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+        return conversation
+
+    conversation = Conversation(user_id=user_id, title=message[:50])
+    conversation = await conv_repo.create(conversation)
+    await session.commit()
+    return conversation
+
+
+async def _build_chat_history(conversation_id: int) -> list:
+    """Build chat history from Redis."""
+    history_data = await get_history(conversation_id)
+    chat_history = []
+    for h in history_data:
+        if h["role"] == "user":
+            chat_history.append(HumanMessage(content=h["content"]))
+        else:
+            chat_history.append(AIMessage(content=h["content"]))
+    return chat_history
+
+
+async def _save_result(session: AsyncSession, conversation: Conversation, result: dict) -> dict:
+    """Save the RAG result to database and return the response."""
+    msg_repo = MessageRepository(session)
 
     ai_message = Message(
         conversation_id=conversation.id,
@@ -97,7 +99,7 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
 
     retrieval_log = RetrievalLog(
         message_id=ai_message.id,
-        query=message,
+        query=result.get("original_query", ""),
         plan=result.get("retrieval_plan", ""),
         retrieved_docs=json.dumps(result.get("retrieved_documents", []), ensure_ascii=False, default=str),
         reranked_docs=json.dumps(result.get("reranked_documents", []), ensure_ascii=False, default=str),
@@ -115,3 +117,101 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
         "citations": citations,
         "workflow_trace": result.get("workflow_trace", []),
     }
+
+
+async def chat(session: AsyncSession, user_id: int, message: str, conversation_id: int | None = None) -> dict:
+    """Non-streaming chat: run the full RAG workflow and return the result."""
+    conversation = await _get_or_create_conversation(session, user_id, conversation_id, message)
+    await save_message(conversation.id, "user", message)
+
+    chat_history = await _build_chat_history(conversation.id)
+    initial_state = _build_initial_state(message, chat_history, conversation.id)
+
+    rag_app = get_rag_app()
+    t0 = time.time()
+    try:
+        result = await rag_app.ainvoke(initial_state)
+    except Exception as e:
+        logger.error("workflow_failed", error=str(e), query=message[:50])
+        raise HTTPException(status_code=500, detail="Chat processing failed")
+    elapsed = time.time() - t0
+    logger.info("workflow_complete", elapsed=f"{elapsed:.1f}s", query=message[:50])
+
+    return await _save_result(session, conversation, result)
+
+
+async def chat_stream(session: AsyncSession, user_id: int, message: str, conversation_id: int | None = None):
+    """Streaming chat: run the RAG workflow and yield progress events via an async queue.
+
+    Yields tuples of (event_type: str, data: dict) for each workflow step.
+    """
+    conversation = await _get_or_create_conversation(session, user_id, conversation_id, message)
+    await save_message(conversation.id, "user", message)
+
+    chat_history = await _build_chat_history(conversation.id)
+    initial_state = _build_initial_state(message, chat_history, conversation.id)
+
+    rag_app = get_rag_app()
+    t0 = time.time()
+
+    # Use aqueue to collect events from the workflow stream
+    event_queue: asyncio.Queue = asyncio.Queue()
+
+    # Run the workflow with streaming
+    final_state = None
+    try:
+        async for event in rag_app.astream(initial_state, stream_mode="updates"):
+            for node_name, state_update in event.items():
+                if node_name == "__end__":
+                    continue
+
+                # Emit progress event based on the node
+                trace = state_update.get("workflow_trace", [])
+                step_info = trace[-1] if trace else {}
+
+                event_data = {
+                    "agent": node_name,
+                    "step": step_info,
+                    "timestamp": time.time(),
+                }
+
+                # Add step-specific data
+                if node_name == "planner":
+                    event_data["plan"] = state_update.get("retrieval_plan", "")
+                elif node_name == "query_agent":
+                    event_data["rewritten_query"] = state_update.get("rewritten_query", "")
+                    event_data["expanded_queries"] = state_update.get("expanded_queries", [])
+                elif node_name == "retriever":
+                    event_data["doc_count"] = len(state_update.get("retrieved_documents", []))
+                elif node_name == "rerank":
+                    event_data["doc_count"] = len(state_update.get("reranked_documents", []))
+                elif node_name == "reflection":
+                    event_data["passed"] = state_update.get("reflection_passed", False)
+                    event_data["result"] = state_update.get("reflection_result", "")
+                elif node_name == "answer":
+                    event_data["answer_length"] = len(state_update.get("final_answer", ""))
+
+                await event_queue.put(("progress", event_data))
+
+                # Track the final state
+                if state_update.get("final_answer"):
+                    final_state = state_update
+
+    except Exception as e:
+        logger.error("workflow_stream_failed", error=str(e), query=message[:50])
+        await event_queue.put(("error", {"detail": "Chat processing failed"}))
+        return
+
+    elapsed = time.time() - t0
+    logger.info("workflow_stream_complete", elapsed=f"{elapsed:.1f}s", query=message[:50])
+
+    # Save the result
+    if final_state:
+        result = await _save_result(session, conversation, final_state)
+        await event_queue.put(("final", result))
+    else:
+        # Fallback: get the last state from the workflow
+        await event_queue.put(("error", {"detail": "No answer generated"}))
+
+    # Signal completion
+    await event_queue.put(("done", {}))
