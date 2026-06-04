@@ -46,3 +46,15 @@ def get_rag_app():
     if _rag_app is None:
         _rag_app = build_rag_workflow()
     return _rag_app
+
+
+async def warmup_rag():
+    """Pre-warm the RAG workflow and models."""
+    try:
+        app = get_rag_app()
+        # Trigger model loading
+        from src.agents.planner import get_llm
+        get_llm()
+        return True
+    except Exception:
+        return False

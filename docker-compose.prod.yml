@@ -1,4 +1,17 @@
 services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: enterprise_rag
+    volumes:
+      - /opt/enterprise-rag/mysql:/var/lib/mysql
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
   etcd:
     image: quay.io/coreos/etcd:v3.5.5
     environment:
@@ -68,6 +81,7 @@ services:
     env_file:
       - .env
     depends_on:
+      - mysql
       - milvus
       - redis
     restart: always

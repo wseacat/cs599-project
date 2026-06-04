@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.models.document import Document, DocumentChunk
 from src.repositories.base import GenericRepository
@@ -13,6 +14,15 @@ class DocumentRepository(GenericRepository):
         stmt = select(Document).where(Document.user_id == user_id).order_by(Document.created_at.desc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_document_with_chunks(self, document_id: int) -> Document | None:
+        stmt = (
+            select(Document)
+            .where(Document.id == document_id)
+            .options(selectinload(Document.chunks))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
 
 class DocumentChunkRepository(GenericRepository):
@@ -29,7 +39,8 @@ class DocumentChunkRepository(GenericRepository):
         return list(result.scalars().all())
 
     async def delete_document_chunks(self, document_id: int) -> None:
-        chunks = await self.get_document_chunks(document_id)
-        for chunk in chunks:
-            await self.session.delete(chunk)
+        # Use bulk delete for better performance
+        from sqlalchemy import delete
+        stmt = delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        await self.session.execute(stmt)
         await self.session.flush()

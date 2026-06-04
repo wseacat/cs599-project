@@ -31,6 +31,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("bm25_rebuild_failed", error=str(e))
 
+    # Pre-warm RAG models
+    try:
+        from src.workflows.rag_workflow import warmup_rag
+        await warmup_rag()
+        logger.info("rag_models_warmed_up")
+    except Exception as e:
+        logger.warning("rag_warmup_failed", error=str(e))
+
     yield
 
     logger.info("shutting_down_application")
@@ -79,6 +87,18 @@ async def global_exception_handler(request, exc):
     from fastapi.responses import JSONResponse
     detail = str(exc) if settings.APP_ENV == "development" else "Internal server error"
     return JSONResponse(status_code=500, content={"detail": detail})
+
+
+@app.exception_handler(404)
+async def not_found_handler(request, exc):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=404, content={"detail": "Resource not found"})
+
+
+@app.exception_handler(422)
+async def validation_error_handler(request, exc):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=422, content={"detail": "Validation error", "errors": exc.errors() if hasattr(exc, 'errors') else str(exc)})
 
 
 if __name__ == "__main__":

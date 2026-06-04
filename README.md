@@ -2,60 +2,133 @@
 
 基于 LangGraph 的企业级 Agentic-RAG 智能知识库系统。
 
-## 系统架构
+## 项目简介
 
-```
-User Query → Planner Agent → Query Agent → Retriever → Rerank → Reflection
-                                                                     ├─ pass → Answer → END
-                                                                     └─ fail → Query Agent (retry)
-```
+本项目构建了一个企业级 Agentic-RAG 智能知识库系统，实现企业文档智能问答、多阶段检索、Query Planning、Reflection、自适应检索优化与多轮上下文对话。系统不是传统 RAG（retrieve → answer），而是基于多阶段 Agent Workflow 的 Agentic-RAG。
+
+## 方向
+
+**方向一：Agentic AI 原生开发**
 
 ## 技术栈
 
-- **Backend**: Python 3.11, FastAPI, LangGraph, LangChain
-- **Vector DB**: Milvus
-- **Cache**: Redis
-- **Embedding**: BGE Large Zh (bge-large-zh-v1.5)
-- **Reranker**: BGE Reranker (bge-reranker-large)
-- **Frontend**: Vue3, TailwindCSS, Pinia
-- **LLM**: OpenAI-compatible API (支持 Qwen/MiMo 等)
+| 类别 | 技术 |
+|------|------|
+| AI IDE | Trae CN |
+| Backend | Python 3.11, FastAPI, LangGraph, LangChain |
+| Vector DB | Milvus |
+| Cache | Redis |
+| Embedding | BGE Large Zh (bge-large-zh-v1.5) |
+| Reranker | BGE Reranker (bge-reranker-large) |
+| Frontend | Vue3, TailwindCSS, Pinia |
+| LLM | OpenAI-compatible API (支持 Qwen/MiMo 等) |
+| 容器化 | Docker, Docker Compose |
+
+## 系统架构
+
+```
+User Query
+    ↓
+Planner Agent → 分析问题，拆解检索任务
+    ↓
+Query Agent → Query Rewrite / Expansion / Optimization
+    ↓
+Retriever Agent → Hybrid Retrieval (Vector + BM25)
+    ↓
+Rerank Agent → BGE Reranker 重排序
+    ↓
+Reflection Agent → 判断检索质量
+    ├─ pass → Answer Agent → 生成答案 + 引用来源
+    └─ fail → 重试检索 (max 2次)
+```
 
 ## Agent 设计
 
-1. **Planner Agent** - 分析复杂问题，拆解检索任务
+1. **Planner Agent** - 分析复杂问题，拆解检索任务，生成 Retrieval Plan
 2. **Query Agent** - Query Rewrite, Expansion, Optimization
-3. **Retriever Agent** - Hybrid Retrieval (Vector + BM25)
-4. **Rerank Agent** - BGE Reranker 重排序
-5. **Reflection Agent** - 判断检索质量，触发重试
+3. **Retriever Agent** - Hybrid Retrieval (Vector + BM25 + Keyword)
+4. **Rerank Agent** - BGE Reranker 重排序，提升相关性
+5. **Reflection Agent** - 判断检索质量，检查信息完整性，触发重试
 6. **Answer Agent** - 生成答案并附带引用来源
 
-## 快速开始
+## 目录结构
 
-### 1. 环境准备
+```
+enterprise-rag/
+├── backend/
+│   └── src/
+│       ├── agents/        # 6 个 Agent 实现
+│       ├── retrieval/     # 检索管线 (Vector, BM25, Hybrid, Reranker)
+│       ├── workflows/     # LangGraph 工作流
+│       ├── memory/        # 对话记忆 (Redis)
+│       ├── models/        # SQLAlchemy 模型
+│       ├── repositories/  # 数据访问层
+│       ├── services/      # 业务逻辑层
+│       ├── api/           # FastAPI 路由
+│       ├── core/          # 配置、日志、依赖注入
+│       ├── schemas/       # Pydantic Schema
+│       ├── utils/         # 工具函数
+│       └── tests/         # 单元测试
+├── frontend/
+│   └── src/
+│       ├── components/    # Vue 组件
+│       ├── views/         # 页面视图
+│       ├── stores/        # Pinia 状态管理
+│       └── services/      # API 调用
+├── docs/                  # 项目文档
+├── docker-compose.yml     # 开发环境
+├── docker-compose.prod.yml
+├── .env.example           # 环境变量模板
+└── LICENSE
+```
+
+## 环境搭建
+
+### 1. 依赖安装
+
+```bash
+# 后端
+cd backend
+pip install -e .
+
+# 前端
+cd frontend
+npm install
+```
+
+### 2. 环境变量配置
 
 ```bash
 # 复制环境配置
 cp .env.example .env
 # 编辑 .env 填入你的 API Key
+# ⚠️ 不要硬编码 API Key
 ```
 
-### 2. 启动基础设施
+### 3. 启动基础设施
 
 ```bash
 docker compose up -d
 ```
 
-### 3. 启动后端
+### 4. 启动后端
 
 ```bash
 cd backend
-pip install -e .
 uvicorn src.main:app --reload --port 8000
 ```
 
-### 4. 访问 API 文档
+### 5. 启动前端
 
-打开浏览器访问 http://localhost:8000/docs
+```bash
+cd frontend
+npm run dev
+```
+
+### 6. 访问
+
+- 前端: http://localhost:5173
+- API 文档: http://localhost:8000/docs
 
 ## API 接口
 
@@ -71,22 +144,34 @@ uvicorn src.main:app --reload --port 8000
 | GET | `/api/conversations/{id}` | 会话详情 |
 | GET | `/api/retrieval/debug/{message_id}` | 检索调试 |
 
-## 项目结构
+## 核心功能
 
-```
-enterprise-rag/
-├── backend/
-│   └── src/
-│       ├── agents/        # 6 个 Agent 实现
-│       ├── retrieval/     # 检索管线
-│       ├── workflows/     # LangGraph 工作流
-│       ├── memory/        # 对话记忆
-│       ├── models/        # SQLAlchemy 模型
-│       ├── repositories/  # 数据访问层
-│       ├── services/      # 业务逻辑层
-│       ├── api/           # FastAPI 路由
-│       └── core/          # 配置、日志、依赖
-├── frontend/              # Vue3 前端
-├── docker-compose.yml     # 开发环境
-└── docker-compose.prod.yml
-```
+- [x] 企业文档上传 (PDF, DOCX, TXT, Markdown)
+- [x] 文档切分与 Embedding 生成
+- [x] Vector Retrieval (Milvus)
+- [x] BM25 Retrieval
+- [x] Hybrid Retrieval
+- [x] Query Rewrite
+- [x] Query Expansion
+- [x] Rerank (BGE Reranker)
+- [x] Reflection (检索质量判断)
+- [x] Retry Retrieval (自动重试)
+- [x] Citation Generation (引用来源)
+- [x] 多轮上下文问答
+- [x] Conversation Memory (Redis)
+- [x] SSE 流式输出
+- [x] Retrieval Debug 可视化
+- [x] Docker 容器化部署
+
+## 项目状态
+
+- [x] Proposal - 设计文档、架构图、Spec 初稿
+- [x] MVP - 核心闭环 Demo
+- [ ] Final - 最终版本
+
+## References
+
+- [LangGraph Documentation](https://python.langchain.com/docs/langgraph)
+- [Milvus Documentation](https://milvus.io/docs)
+- [BGE Embedding](https://huggingface.co/BAAI/bge-large-zh-v1.5)
+- [Agentic RAG Paper](https://arxiv.org/abs/2401.15884)

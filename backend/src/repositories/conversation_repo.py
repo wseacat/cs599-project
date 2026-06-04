@@ -1,5 +1,6 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.models.conversation import Conversation, Message
 from src.repositories.base import GenericRepository
@@ -29,6 +30,7 @@ class ConversationRepository(GenericRepository):
         stmt = (
             select(Conversation)
             .where(Conversation.id == conversation_id)
+            .options(selectinload(Conversation.messages))
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -38,14 +40,17 @@ class MessageRepository(GenericRepository):
     def __init__(self, session: AsyncSession):
         super().__init__(session, Message)
 
-    async def get_conversation_messages(self, conversation_id: int) -> list[Message]:
+    async def get_conversation_messages(self, conversation_id: int, limit: int = 50) -> list[Message]:
         stmt = (
             select(Message)
             .where(Message.conversation_id == conversation_id)
-            .order_by(Message.created_at)
+            .order_by(Message.created_at.desc())
+            .limit(limit)
         )
         result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        messages = list(result.scalars().all())
+        messages.reverse()  # Return in chronological order
+        return messages
 
     async def count_messages(self, conversation_id: int) -> int:
         stmt = select(func.count()).select_from(Message).where(Message.conversation_id == conversation_id)

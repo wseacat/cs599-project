@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8002',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },
@@ -18,8 +18,17 @@ export default defineConfig({
         manualChunks: {
           'highlight': ['highlight.js'],
           'vendor': ['vue', 'vue-router', 'pinia', 'axios'],
+          'markdown': ['marked', 'dompurify'],
         },
       },
     },
+    // Enable CSS code splitting
+    cssCodeSplit: true,
+    // Optimize chunk size
+    chunkSizeWarningLimit: 1000,
+  },
+  // Enable preloading
+  html: {
+    cspNonce: undefined,
   },
 })

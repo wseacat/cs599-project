@@ -14,16 +14,32 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Handle 401 responses globally
+// Handle responses globally
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const { response } = error
+
+    if (response?.status === 401) {
       localStorage.removeItem('rag_token')
       localStorage.removeItem('rag_username')
       localStorage.removeItem('rag_user_id')
       window.location.href = '/login'
     }
+
+    // Enhance error message for better UX
+    if (response?.data?.detail) {
+      error.message = response.data.detail
+    } else if (response?.status === 500) {
+      error.message = '服务器错误，请稍后重试'
+    } else if (response?.status === 404) {
+      error.message = '请求的资源不存在'
+    } else if (response?.status === 422) {
+      error.message = '请求参数错误'
+    } else if (!response) {
+      error.message = '网络连接失败，请检查网络'
+    }
+
     return Promise.reject(error)
   },
 )
