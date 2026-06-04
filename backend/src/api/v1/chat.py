@@ -31,7 +31,6 @@ async def chat_endpoint(
 @router.post("/stream")
 async def chat_stream_endpoint(
     request: ChatRequest,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Send a message and get a streaming response via SSE.
@@ -45,9 +44,7 @@ async def chat_stream_endpoint(
 
     async def event_generator():
         try:
-            # Stream progress events from the RAG workflow
             async for event_type, event_data in chat_stream(
-                db,
                 user_id=current_user.id,
                 message=request.message,
                 conversation_id=request.conversation_id,
@@ -56,11 +53,6 @@ async def chat_stream_endpoint(
                     yield {
                         "event": "progress",
                         "data": json.dumps(event_data, ensure_ascii=False),
-                    }
-                elif event_type == "token":
-                    yield {
-                        "event": "token",
-                        "data": json.dumps({"text": event_data.get("text", "")}, ensure_ascii=False),
                     }
                 elif event_type == "final":
                     yield {
@@ -76,8 +68,6 @@ async def chat_stream_endpoint(
                         "event": "error",
                         "data": json.dumps(event_data, ensure_ascii=False),
                     }
-                elif event_type == "done":
-                    break
 
         except Exception as e:
             logger.error("chat_stream_failed", error=str(e))

@@ -140,78 +140,75 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
     return await _save_result(session, conversation, result)
 
 
-async def chat_stream(session: AsyncSession, user_id: int, message: str, conversation_id: int | None = None):
-    """Streaming chat: run the RAG workflow and yield progress events via an async queue.
+async def chat_stream(user_id: int, message: str, conversation_id: int | None = None):
+    """Streaming chat: run the RAG workflow and yield progress events.
 
+    Creates its own DB session since the SSE generator outlives the request session.
     Yields tuples of (event_type: str, data: dict) for each workflow step.
     """
-    conversation = await _get_or_create_conversation(session, user_id, conversation_id, message)
-    await save_message(conversation.id, "user", message)
+    from src.core.deps import async_session_factory
 
-    chat_history = await _build_chat_history(conversation.id)
-    initial_state = _build_initial_state(message, chat_history, conversation.id)
+    async with async_session_factory() as session:
+        conversation = await _get_or_create_conversation(session, user_id, conversation_id, message)
+        await save_message(conversation.id, "user", message)
 
-    rag_app = get_rag_app()
-    t0 = time.time()
+        chat_history = await _build_chat_history(conversation.id)
+        initial_state = _build_initial_state(message, chat_history, conversation.id)
 
-    # Use aqueue to collect events from the workflow stream
-    event_queue: asyncio.Queue = asyncio.Queue()
+        rag_app = get_rag_app()
+        t0 = time.time()
 
-    # Run the workflow with streaming
-    final_state = None
-    try:
-        async for event in rag_app.astream(initial_state, stream_mode="updates"):
-            for node_name, state_update in event.items():
-                if node_name == "__end__":
-                    continue
+        # Run the workflow with streaming
+        final_state = None
+        try:
+            async for event in rag_app.astream(initial_state, stream_mode="updates"):
+                for node_name, state_update in event.items():
+                    if node_name == "__end__":
+                        continue
 
-                # Emit progress event based on the node
-                trace = state_update.get("workflow_trace", [])
-                step_info = trace[-1] if trace else {}
+                    # Emit progress event based on the node
+                    trace = state_update.get("workflow_trace", [])
+                    step_info = trace[-1] if trace else {}
 
-                event_data = {
-                    "agent": node_name,
-                    "step": step_info,
-                    "timestamp": time.time(),
-                }
+                    event_data = {
+                        "agent": node_name,
+                        "step": step_info,
+                        "timestamp": time.time(),
+                    }
 
-                # Add step-specific data
-                if node_name == "planner":
-                    event_data["plan"] = state_update.get("retrieval_plan", "")
-                elif node_name == "query_agent":
-                    event_data["rewritten_query"] = state_update.get("rewritten_query", "")
-                    event_data["expanded_queries"] = state_update.get("expanded_queries", [])
-                elif node_name == "retriever":
-                    event_data["doc_count"] = len(state_update.get("retrieved_documents", []))
-                elif node_name == "rerank":
-                    event_data["doc_count"] = len(state_update.get("reranked_documents", []))
-                elif node_name == "reflection":
-                    event_data["passed"] = state_update.get("reflection_passed", False)
-                    event_data["result"] = state_update.get("reflection_result", "")
-                elif node_name == "answer":
-                    event_data["answer_length"] = len(state_update.get("final_answer", ""))
+                    # Add step-specific data
+                    if node_name == "planner":
+                        event_data["plan"] = state_update.get("retrieval_plan", "")
+                    elif node_name == "query_agent":
+                        event_data["rewritten_query"] = state_update.get("rewritten_query", "")
+                        event_data["expanded_queries"] = state_update.get("expanded_queries", [])
+                    elif node_name == "retriever":
+                        event_data["doc_count"] = len(state_update.get("retrieved_documents", []))
+                    elif node_name == "rerank":
+                        event_data["doc_count"] = len(state_update.get("reranked_documents", []))
+                    elif node_name == "reflection":
+                        event_data["passed"] = state_update.get("reflection_passed", False)
+                        event_data["result"] = state_update.get("reflection_result", "")
+                    elif node_name == "answer":
+                        event_data["answer_length"] = len(state_update.get("final_answer", ""))
 
-                await event_queue.put(("progress", event_data))
+                    yield ("progress", event_data)
 
-                # Track the final state
-                if state_update.get("final_answer"):
-                    final_state = state_update
+                    # Track the final state
+                    if state_update.get("final_answer"):
+                        final_state = state_update
 
-    except Exception as e:
-        logger.error("workflow_stream_failed", error=str(e), query=message[:50])
-        await event_queue.put(("error", {"detail": "Chat processing failed"}))
-        return
+        except Exception as e:
+            logger.error("workflow_stream_failed", error=str(e), query=message[:50])
+            yield ("error", {"detail": "Chat processing failed"})
+            return
 
-    elapsed = time.time() - t0
-    logger.info("workflow_stream_complete", elapsed=f"{elapsed:.1f}s", query=message[:50])
+        elapsed = time.time() - t0
+        logger.info("workflow_stream_complete", elapsed=f"{elapsed:.1f}s", query=message[:50])
 
-    # Save the result
-    if final_state:
-        result = await _save_result(session, conversation, final_state)
-        await event_queue.put(("final", result))
-    else:
-        # Fallback: get the last state from the workflow
-        await event_queue.put(("error", {"detail": "No answer generated"}))
-
-    # Signal completion
-    await event_queue.put(("done", {}))
+        # Save the result
+        if final_state:
+            result = await _save_result(session, conversation, final_state)
+            yield ("final", result)
+        else:
+            yield ("error", {"detail": "No answer generated"})
