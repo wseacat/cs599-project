@@ -8,6 +8,13 @@ from src.repositories.document_repo import DocumentRepository
 from src.schemas.document import DocumentChunkResponse, DocumentListResponse, DocumentUploadResponse
 from src.services.document_service import delete_document, process_document_upload, upload_document
 
+import structlog
+
+logger = structlog.get_logger()
+
+# Max file size: 50MB
+MAX_FILE_SIZE = 50 * 1024 * 1024
+
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
@@ -25,10 +32,23 @@ async def upload(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    import structlog
-    logger = structlog.get_logger()
     try:
         content = await file.read()
+
+        # Validate file size
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB"
+            )
+
+        # Validate file is not empty
+        if len(content) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Empty file"
+            )
+
         doc = await upload_document(db, user_id=current_user.id, filename=file.filename or "unknown", file_content=content)
         return DocumentUploadResponse(
             id=doc.id, filename=doc.filename, file_type=doc.file_type,
