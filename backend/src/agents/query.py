@@ -9,22 +9,24 @@ logger = structlog.get_logger()
 
 
 async def query_agent(state: RAGState) -> dict:
+    """Optimize and expand user query for better retrieval."""
     query = state["original_query"]
     plan = state.get("retrieval_plan", "{}")
     retry_count = state.get("retry_count", 0)
     reflection_result = state.get("reflection_result", "")
 
+    # Parse retrieval plan
     try:
         plan_obj = json.loads(plan)
     except json.JSONDecodeError:
         plan_obj = {"sub_queries": [query]}
 
-    llm = get_llm()
-
+    # Add retry hint if this is a retry attempt
     retry_hint = ""
     if retry_count > 0:
         retry_hint = f"\n上一次检索结果不理想：{reflection_result}\n请调整查询策略。"
 
+    llm = get_llm()
     prompt = f"""你是一个查询优化专家。对用户查询进行改写和扩展。
 
 原始查询：{query}
@@ -43,14 +45,14 @@ async def query_agent(state: RAGState) -> dict:
 
 只返回JSON，不要其他内容。"""
 
-    response = await llm.ainvoke(prompt)
-    result_text = _extract_text(response.content)
-
     try:
+        response = await llm.ainvoke(prompt)
+        result_text = _extract_text(response.content)
         result = json.loads(result_text)
         rewritten = result.get("rewritten_query", query)
         expanded = result.get("expanded_queries", [query])
-    except (json.JSONDecodeError, TypeError):
+    except Exception as e:
+        logger.warning("query_optimization_failed", error=str(e))
         rewritten = query
         expanded = [query]
 

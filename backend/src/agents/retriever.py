@@ -10,6 +10,7 @@ logger = structlog.get_logger()
 
 
 async def retriever_agent(state: RAGState) -> dict:
+    """Retrieve relevant documents using hybrid search."""
     original_query = state["original_query"]
     rewritten_query = state.get("rewritten_query", original_query)
     expanded_queries = state.get("expanded_queries", [rewritten_query])
@@ -24,6 +25,7 @@ async def retriever_agent(state: RAGState) -> dict:
         return_exceptions=True,
     )
 
+    # Merge results by chunk_id, keeping highest score
     all_results = {}
     for results in search_results:
         if isinstance(results, Exception):
@@ -36,6 +38,7 @@ async def retriever_agent(state: RAGState) -> dict:
             elif key and r.get("rrf_score", 0) > all_results[key].get("rrf_score", 0):
                 all_results[key] = r
 
+    # Sort by RRF score and limit results
     documents = list(all_results.values())
     documents.sort(key=lambda x: x.get("rrf_score", 0), reverse=True)
     documents = documents[:settings.RETRIEVAL_TOP_K]

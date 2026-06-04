@@ -8,13 +8,16 @@ logger = structlog.get_logger()
 
 
 async def rerank_agent(state: RAGState) -> dict:
+    """Rerank retrieved documents using BGE Reranker."""
     retrieved = state.get("retrieved_documents", [])
     query = state.get("rewritten_query", state["original_query"])
     settings = get_settings()
 
+    # Return empty if no documents retrieved
     if not retrieved:
         return {"reranked_documents": [], "workflow_trace": state.get("workflow_trace", [])}
 
+    # Rerank documents with fallback to score-based sorting
     try:
         reranked = await rerank(query, retrieved, top_k=settings.RERANK_TOP_K)
     except Exception as e:

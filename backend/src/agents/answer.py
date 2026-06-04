@@ -1,5 +1,3 @@
-import json
-
 from src.agents.state import RAGState
 from src.agents.planner import get_llm, _extract_text
 
@@ -9,14 +7,17 @@ logger = structlog.get_logger()
 
 
 async def answer_agent(state: RAGState) -> dict:
+    """Generate final answer with citations from reranked documents."""
     query = state["original_query"]
     reranked = state.get("reranked_documents", [])
     chat_history = state.get("chat_history", [])
 
+    # Build conversation history context
     history_text = ""
     if chat_history:
         history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in chat_history[-6:]])
 
+    # Build document context and citations
     context_parts = []
     citations = []
     for i, doc in enumerate(reranked):
@@ -32,6 +33,7 @@ async def answer_agent(state: RAGState) -> dict:
 
     context = "\n\n".join(context_parts)
 
+    # Generate answer with LLM
     llm = get_llm()
     prompt = f"""你是一个企业知识库问答助手。根据提供的文档上下文回答用户问题。
 
@@ -50,8 +52,12 @@ async def answer_agent(state: RAGState) -> dict:
 
 请直接输出回答内容，不要返回JSON。"""
 
-    response = await llm.ainvoke(prompt)
-    answer = _extract_text(response.content)
+    try:
+        response = await llm.ainvoke(prompt)
+        answer = _extract_text(response.content)
+    except Exception as e:
+        logger.error("answer_generation_failed", error=str(e))
+        answer = "抱歉，生成答案时出现错误，请稍后重试。"
 
     logger.info("answer_complete", query=query[:50], answer_length=len(answer), citations_count=len(citations))
 

@@ -11,6 +11,7 @@ logger = structlog.get_logger()
 
 
 def _extract_text(content) -> str:
+    """Extract text from LLM response content."""
     if isinstance(content, str):
         return content
     if isinstance(content, list) and content:
@@ -25,6 +26,7 @@ _llm: ChatAnthropic | None = None
 
 
 def get_llm() -> ChatAnthropic:
+    """Get or create LLM instance (singleton)."""
     global _llm
     if _llm is not None:
         return _llm
@@ -42,9 +44,11 @@ def get_llm() -> ChatAnthropic:
 
 
 async def planner_agent(state: RAGState) -> dict:
+    """Analyze user query and generate retrieval plan."""
     query = state["original_query"]
     chat_history = state.get("chat_history", [])
 
+    # Build conversation history context
     history_text = ""
     if chat_history:
         history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in chat_history[-6:]])
@@ -66,12 +70,12 @@ async def planner_agent(state: RAGState) -> dict:
 
 只返回JSON，不要其他内容。"""
 
-    response = await llm.ainvoke(prompt)
-    plan_text = _extract_text(response.content)
-
     try:
+        response = await llm.ainvoke(prompt)
+        plan_text = _extract_text(response.content)
         plan = json.loads(plan_text)
-    except (json.JSONDecodeError, TypeError):
+    except Exception as e:
+        logger.warning("planner_parse_failed", error=str(e))
         plan = {"needs_decomposition": False, "sub_queries": [query], "strategy": "直接检索", "key_entities": []}
 
     logger.info("planner_complete", query=query[:50], plan=plan)

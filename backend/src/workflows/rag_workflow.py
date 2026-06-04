@@ -10,16 +10,22 @@ from src.agents.answer import answer_agent
 
 
 def should_retry(state: RAGState) -> str:
+    """Determine whether to retry retrieval or proceed to answer generation."""
+    # If reflection passed, proceed to answer
     if state.get("reflection_passed", False):
         return "answer"
+    # If max retries exceeded, proceed to answer with available documents
     if state.get("retry_count", 0) >= 1:
         return "answer"
+    # Otherwise, retry with optimized query
     return "query_agent"
 
 
 def build_rag_workflow() -> StateGraph:
+    """Build the RAG workflow graph with all agents."""
     graph = StateGraph(RAGState)
 
+    # Add agent nodes
     graph.add_node("planner", planner_agent)
     graph.add_node("query_agent", query_agent)
     graph.add_node("retriever", retriever_agent)
@@ -27,12 +33,20 @@ def build_rag_workflow() -> StateGraph:
     graph.add_node("reflection", reflection_agent)
     graph.add_node("answer", answer_agent)
 
+    # Define workflow edges
     graph.set_entry_point("planner")
     graph.add_edge("planner", "query_agent")
     graph.add_edge("query_agent", "retriever")
     graph.add_edge("retriever", "rerank")
     graph.add_edge("rerank", "reflection")
-    graph.add_conditional_edges("reflection", should_retry, {"answer": "answer", "query_agent": "query_agent"})
+
+    # Conditional edge: retry or answer
+    graph.add_conditional_edges(
+        "reflection",
+        should_retry,
+        {"answer": "answer", "query_agent": "query_agent"}
+    )
+
     graph.add_edge("answer", END)
 
     return graph.compile()
@@ -42,6 +56,7 @@ _rag_app = None
 
 
 def get_rag_app():
+    """Get or create RAG workflow instance (singleton)."""
     global _rag_app
     if _rag_app is None:
         _rag_app = build_rag_workflow()

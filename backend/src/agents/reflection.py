@@ -10,11 +10,13 @@ logger = structlog.get_logger()
 
 
 async def reflection_agent(state: RAGState) -> dict:
+    """Evaluate retrieval quality and decide whether to retry."""
     query = state["original_query"]
     reranked = state.get("reranked_documents", [])
     retry_count = state.get("retry_count", 0)
     settings = get_settings()
 
+    # Evaluate retrieval quality
     if not reranked:
         passed = False
         result = "No documents retrieved"
@@ -25,6 +27,7 @@ async def reflection_agent(state: RAGState) -> dict:
         passed = True
         result = f"Auto-pass: {len(reranked)} documents retrieved (few but acceptable)"
 
+    # Determine if retry is needed
     should_retry = not passed and retry_count < settings.MAX_RETRY_COUNT
 
     logger.info("reflection_complete", passed=passed, retry_count=retry_count, should_retry=should_retry)
