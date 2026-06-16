@@ -68,19 +68,21 @@ export const useChatStore = defineStore('chat', () => {
           currentAgent.value = progressData.agent || ''
           workflowProgress.value.push(progressData)
 
-          // Update streaming text based on agent progress
-          if (progressData.agent === 'answer') {
-            streamingText.value = '正在生成答案...'
-          } else if (progressData.agent === 'planner') {
-            streamingText.value = '正在分析问题...'
-          } else if (progressData.agent === 'query_agent') {
-            streamingText.value = '正在优化查询...'
-          } else if (progressData.agent === 'retriever') {
-            streamingText.value = `正在检索文档 (${progressData.doc_count || 0} 个结果)...`
-          } else if (progressData.agent === 'rerank') {
-            streamingText.value = '正在重排序...'
-          } else if (progressData.agent === 'reflection') {
-            streamingText.value = progressData.passed ? '检索质量良好' : '正在重试检索...'
+          // Only update streaming text if we haven't received any tokens yet
+          if (!streamingText.value || !streamingText.value.length) {
+            if (progressData.agent === 'answer') {
+              streamingText.value = '正在生成答案...'
+            } else if (progressData.agent === 'planner') {
+              streamingText.value = '正在分析问题...'
+            } else if (progressData.agent === 'query_agent') {
+              streamingText.value = '正在优化查询...'
+            } else if (progressData.agent === 'retriever') {
+              streamingText.value = `正在检索文档 (${progressData.doc_count || 0} 个结果)...`
+            } else if (progressData.agent === 'rerank') {
+              streamingText.value = '正在重排序...'
+            } else if (progressData.agent === 'reflection') {
+              streamingText.value = progressData.passed ? '检索质量良好' : '正在重试检索...'
+            }
           }
         },
         onToken(tokenData) {

@@ -1,6 +1,6 @@
 import json
 
-from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 
 from src.agents.state import RAGState
 from src.core.config import get_settings
@@ -22,16 +22,16 @@ def _extract_text(content) -> str:
     return ""
 
 
-_llm: ChatAnthropic | None = None
+_llm: ChatOpenAI | None = None
 
 
-def get_llm() -> ChatAnthropic:
+def get_llm() -> ChatOpenAI:
     """Get or create LLM instance (singleton)."""
     global _llm
     if _llm is not None:
         return _llm
     settings = get_settings()
-    _llm = ChatAnthropic(
+    _llm = ChatOpenAI(
         api_key=settings.LLM_API_KEY,
         base_url=settings.LLM_BASE_URL,
         model=settings.LLM_MODEL,
@@ -73,6 +73,12 @@ async def planner_agent(state: RAGState) -> dict:
     try:
         response = await llm.ainvoke(prompt)
         plan_text = _extract_text(response.content)
+        # Try to extract JSON from response (may contain markdown code blocks)
+        if "```" in plan_text:
+            import re
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', plan_text, re.DOTALL)
+            if json_match:
+                plan_text = json_match.group(1)
         plan = json.loads(plan_text)
     except Exception as e:
         logger.warning("planner_parse_failed", error=str(e))

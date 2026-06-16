@@ -49,7 +49,9 @@ async def _get_or_create_conversation(session: AsyncSession, user_id: int, conve
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
         return conversation
 
-    conversation = Conversation(user_id=user_id, title=message[:50])
+    # Auto-generate title from first message (truncate at 50 chars)
+    title = message.strip()[:50] if message.strip() else "新对话"
+    conversation = Conversation(user_id=user_id, title=title)
     conversation = await conv_repo.create(conversation)
     await session.commit()
     return conversation
@@ -159,12 +161,17 @@ async def chat_stream(user_id: int, message: str, conversation_id: int | None = 
         t0 = time.time()
 
         # Run the workflow with streaming
-        final_state = None
+        accumulated_state = dict(initial_state)
         try:
             async for event in rag_app.astream(initial_state, stream_mode="updates"):
                 for node_name, state_update in event.items():
                     if node_name == "__end__":
                         continue
+
+                    # Merge state updates into accumulated state
+                    for key, value in state_update.items():
+                        if value is not None:
+                            accumulated_state[key] = value
 
                     # Emit progress event based on the node
                     trace = state_update.get("workflow_trace", [])
@@ -190,13 +197,13 @@ async def chat_stream(user_id: int, message: str, conversation_id: int | None = 
                         event_data["passed"] = state_update.get("reflection_passed", False)
                         event_data["result"] = state_update.get("reflection_result", "")
                     elif node_name == "answer":
-                        event_data["answer_length"] = len(state_update.get("final_answer", ""))
+                        answer_text = state_update.get("final_answer", "")
+                        event_data["answer_length"] = len(answer_text)
+                        # Send token event with the answer text
+                        if answer_text:
+                            yield ("token", {"text": answer_text})
 
                     yield ("progress", event_data)
-
-                    # Track the final state
-                    if state_update.get("final_answer"):
-                        final_state = state_update
 
         except Exception as e:
             logger.error("workflow_stream_failed", error=str(e), query=message[:50])
@@ -206,9 +213,10 @@ async def chat_stream(user_id: int, message: str, conversation_id: int | None = 
         elapsed = time.time() - t0
         logger.info("workflow_stream_complete", elapsed=f"{elapsed:.1f}s", query=message[:50])
 
-        # Save the result
-        if final_state:
-            result = await _save_result(session, conversation, final_state)
+        # Save the result using accumulated state
+        final_answer = accumulated_state.get("final_answer", "")
+        if final_answer:
+            result = await _save_result(session, conversation, accumulated_state)
             yield ("final", result)
         else:
             yield ("error", {"detail": "No answer generated"})

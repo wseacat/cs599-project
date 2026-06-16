@@ -12,17 +12,23 @@ class BM25Index:
         self._tokenized: list[list[str]] = []
         self._bm25: BM25Okapi | None = None
         self._chunk_ids: list[int] = []
+        self._document_ids: list[int] = []
+        self._metadatas: list[str] = []
 
-    def build(self, documents: list[str], chunk_ids: list[int]) -> None:
+    def build(self, documents: list[str], chunk_ids: list[int], document_ids: list[int] | None = None, metadatas: list[str] | None = None) -> None:
         self._corpus = documents
         self._chunk_ids = chunk_ids
+        self._document_ids = document_ids or [0] * len(chunk_ids)
+        self._metadatas = metadatas or ["{}"] * len(chunk_ids)
         self._tokenized = [list(jieba.cut(doc)) for doc in documents]
         self._bm25 = BM25Okapi(self._tokenized)
         logger.info("bm25_index_built", doc_count=len(documents))
 
-    def add_documents(self, documents: list[str], chunk_ids: list[int]) -> None:
+    def add_documents(self, documents: list[str], chunk_ids: list[int], document_ids: list[int] | None = None, metadatas: list[str] | None = None) -> None:
         self._corpus.extend(documents)
         self._chunk_ids.extend(chunk_ids)
+        self._document_ids.extend(document_ids or [0] * len(chunk_ids))
+        self._metadatas.extend(metadatas or ["{}"] * len(chunk_ids))
         self._tokenized.extend([list(jieba.cut(doc)) for doc in documents])
         self._bm25 = BM25Okapi(self._tokenized)
         logger.info("bm25_documents_added", added=len(documents), total=len(self._corpus))
@@ -33,6 +39,8 @@ class BM25Index:
             return
         self._corpus = [self._corpus[i] for i in keep_indices]
         self._chunk_ids = [self._chunk_ids[i] for i in keep_indices]
+        self._document_ids = [self._document_ids[i] for i in keep_indices]
+        self._metadatas = [self._metadatas[i] for i in keep_indices]
         self._tokenized = [self._tokenized[i] for i in keep_indices]
         self._bm25 = BM25Okapi(self._tokenized) if self._corpus else None
         logger.info("bm25_documents_removed", remaining=len(self._corpus))
@@ -50,7 +58,9 @@ class BM25Index:
             if score > 0:
                 results.append({
                     "chunk_id": self._chunk_ids[idx],
+                    "document_id": self._document_ids[idx],
                     "content": self._corpus[idx],
+                    "metadata_json": self._metadatas[idx],
                     "score": float(score),
                     "source": "bm25",
                 })
@@ -74,7 +84,7 @@ async def rebuild_bm25_from_db() -> None:
     from src.models.document import DocumentChunk
 
     async with async_session_factory() as session:
-        result = await session.execute(select(DocumentChunk.id, DocumentChunk.content))
+        result = await session.execute(select(DocumentChunk.id, DocumentChunk.document_id, DocumentChunk.content, DocumentChunk.metadata_json))
         rows = result.all()
 
     if not rows:
@@ -82,8 +92,10 @@ async def rebuild_bm25_from_db() -> None:
         return
 
     chunk_ids = [r[0] for r in rows]
-    contents = [r[1] for r in rows]
+    document_ids = [r[1] for r in rows]
+    contents = [r[2] for r in rows]
+    metadatas = [r[3] or "{}" for r in rows]
 
     index = get_bm25_index()
-    index.build(contents, chunk_ids)
+    index.build(contents, chunk_ids, document_ids, metadatas)
     logger.info("bm25_rebuild_complete", chunk_count=len(chunk_ids))

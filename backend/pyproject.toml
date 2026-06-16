@@ -17,7 +17,7 @@ dependencies = [
     "langchain>=0.3",
     "langchain-core>=0.3",
     "langchain-community>=0.3",
-    "langchain-anthropic>=0.3",
+    "langchain-openai>=0.2",
     # Database
     "sqlalchemy[asyncio]>=2.0",
     "aiomysql>=0.2.0",
@@ -73,3 +73,11 @@ line-length = 120
 [tool.mypy]
 python_version = "3.11"
 asyncio_mode = "auto"
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]

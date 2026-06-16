@@ -52,7 +52,7 @@ async def process_document(document_id: int, content: str, filename: str, sessio
     # Add to BM25 index
     from src.retrieval.bm25 import get_bm25_index
     bm25 = get_bm25_index()
-    bm25.add_documents(contents, chunk_db_ids)
+    bm25.add_documents(contents, chunk_db_ids, document_ids, metadatas)
 
     logger.info("document_processed", document_id=document_id, chunk_count=len(chunks))
     return {"chunk_count": len(chunks), "status": "completed"}
