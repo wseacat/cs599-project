@@ -14,14 +14,14 @@
 
 | 类别 | 技术 |
 |------|------|
-| AI IDE | Trae CN |
+| AI IDE | Claude Code |
 | Backend | Python 3.11, FastAPI, LangGraph, LangChain |
 | Vector DB | Milvus |
 | Cache | Redis |
 | Embedding | BGE Large Zh (bge-large-zh-v1.5) |
 | Reranker | BGE Reranker (bge-reranker-large) |
 | Frontend | Vue3, TailwindCSS, Pinia |
-| LLM | OpenAI-compatible API (支持 Qwen/MiMo 等) |
+| LLM | mimo-v2.5-pro（小米 MiMo，OpenAI 兼容 API） |
 | 容器化 | Docker, Docker Compose |
 
 ## 系统架构

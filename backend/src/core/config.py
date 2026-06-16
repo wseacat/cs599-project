@@ -17,9 +17,9 @@ class Settings(BaseSettings):
 
     # LLM
     LLM_API_KEY: str = ""
-    LLM_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    LLM_MODEL: str = "qwen-plus"
-    LLM_TEMPERATURE: float = 0.1
+    LLM_BASE_URL: str = "https://token-plan-cn.xiaomimimo.com/v1"
+    LLM_MODEL: str = "mimo-v2.5-pro"
+    LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 4096
 
     # Embedding

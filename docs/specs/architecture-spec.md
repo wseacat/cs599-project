@@ -48,7 +48,7 @@
                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │                 Infrastructure Layer                    │
-│      (PostgreSQL + Milvus + Redis + External APIs)      │
+│      (MySQL + Milvus + Redis + External APIs)      │
 └─────────────────────────────────────────────────────────┘
 ```
 
