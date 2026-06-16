@@ -51,6 +51,13 @@ function newChat() {
   router.push({ name: 'Chat' })
 }
 
+function logout() {
+  localStorage.removeItem('rag_token')
+  localStorage.removeItem('rag_username')
+  localStorage.removeItem('rag_user_id')
+  window.location.href = '/login'
+}
+
 async function openConversation(id) {
   if (selectMode.value) {
     toggleSelect(id)
@@ -247,8 +254,16 @@ function formatDate(dateStr) {
     </div>
 
     <!-- Footer -->
-    <div v-if="!collapsed" class="p-4 border-t border-gray-700 text-xs text-gray-500">
-      企业 RAG v0.1
+    <div v-if="!collapsed" class="p-4 border-t border-gray-700 space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs text-gray-500">企业 RAG v0.1</span>
+        <button
+          class="text-xs text-gray-400 hover:text-red-400 transition-colors"
+          @click="logout"
+        >
+          退出登录
+        </button>
+      </div>
     </div>
   </aside>
 </template>
