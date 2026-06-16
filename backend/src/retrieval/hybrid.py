@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 SEARCH_CACHE_TTL = 300
 
 
-async def hybrid_search(query: str, top_k: int = 10) -> list[dict]:
+async def hybrid_search(query: str, top_k: int = 10, user_id: int | None = None) -> list[dict]:
     # Check cache first
     cache_key = f"search:{hashlib.md5(query.encode()).hexdigest()}:{top_k}"
     try:
@@ -28,7 +28,7 @@ async def hybrid_search(query: str, top_k: int = 10) -> list[dict]:
 
     # Run BM25 and vector search in parallel
     bm25_index = get_bm25_index()
-    bm25_task = asyncio.to_thread(bm25_index.search, query, top_k)
+    bm25_task = asyncio.to_thread(bm25_index.search, query, top_k, user_id)
     vector_task = search_similar(query, top_k=top_k)
 
     bm25_results, vector_results = await asyncio.gather(

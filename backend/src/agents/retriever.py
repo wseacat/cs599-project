@@ -21,7 +21,7 @@ async def retriever_agent(state: RAGState) -> dict:
 
     # Run all searches concurrently
     search_results = await asyncio.gather(
-        *[hybrid_search(q, top_k=settings.RETRIEVAL_TOP_K) for q in queries],
+        *[hybrid_search(q, top_k=settings.RETRIEVAL_TOP_K, user_id=state.get("user_id")) for q in queries],
         return_exceptions=True,
     )
 

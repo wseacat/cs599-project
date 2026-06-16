@@ -36,3 +36,4 @@ class RAGState(TypedDict):
     conversation_id: int | None
     message_id: int | None
     workflow_trace: list[dict]
+    user_id: int | None

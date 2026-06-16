@@ -19,7 +19,7 @@ import structlog
 logger = structlog.get_logger()
 
 
-def _build_initial_state(message: str, chat_history: list, conversation_id: int) -> RAGState:
+def _build_initial_state(message: str, chat_history: list, conversation_id: int, user_id: int | None = None) -> RAGState:
     """Build the initial RAG state for a chat request."""
     return {
         "original_query": message,
@@ -37,6 +37,7 @@ def _build_initial_state(message: str, chat_history: list, conversation_id: int)
         "conversation_id": conversation_id,
         "message_id": None,
         "workflow_trace": [],
+        "user_id": user_id,
     }
 
 
@@ -127,7 +128,7 @@ async def chat(session: AsyncSession, user_id: int, message: str, conversation_i
     await save_message(conversation.id, "user", message)
 
     chat_history = await _build_chat_history(conversation.id)
-    initial_state = _build_initial_state(message, chat_history, conversation.id)
+    initial_state = _build_initial_state(message, chat_history, conversation.id, user_id)
 
     rag_app = get_rag_app()
     t0 = time.time()
@@ -155,7 +156,7 @@ async def chat_stream(user_id: int, message: str, conversation_id: int | None = 
         await save_message(conversation.id, "user", message)
 
         chat_history = await _build_chat_history(conversation.id)
-        initial_state = _build_initial_state(message, chat_history, conversation.id)
+        initial_state = _build_initial_state(message, chat_history, conversation.id, user_id)
 
         rag_app = get_rag_app()
         t0 = time.time()
