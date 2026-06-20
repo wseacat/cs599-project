@@ -53,33 +53,48 @@ Reflection Agent → 判断检索质量
 
 ## 目录结构
 
+> 采用前后端分离架构，`backend/` 和 `frontend/` 对应课程模板中的 `src/` 源代码目录。
+
 ```
-enterprise-rag/
-├── backend/
+cs599-project/
+├── docs/                         # 项目文档
+│   ├── CS599_大作业报告.pdf        # 最终提交的报告
+│   ├── specs/                    # SDD 规格文档
+│   │   ├── product-spec.md       # Product Spec
+│   │   ├── architecture-spec.md  # Architecture Spec
+│   │   └── api-spec.md           # API Spec
+│   └── architecture.md           # 架构说明
+├── backend/                      # 后端服务（对应模板 src/）
 │   └── src/
-│       ├── agents/        # 6 个 Agent 实现
-│       ├── retrieval/     # 检索管线 (Vector, BM25, Hybrid, Reranker)
-│       ├── workflows/     # LangGraph 工作流
-│       ├── memory/        # 对话记忆 (Redis)
-│       ├── models/        # SQLAlchemy 模型
-│       ├── repositories/  # 数据访问层
-│       ├── services/      # 业务逻辑层
-│       ├── api/           # FastAPI 路由
-│       ├── core/          # 配置、日志、依赖注入
-│       ├── schemas/       # Pydantic Schema
-│       ├── utils/         # 工具函数
-│       └── tests/         # 单元测试
-├── frontend/
+│       ├── agents/               # 6 个 Agent 实现
+│       ├── retrieval/            # 检索管线 (Vector, BM25, Hybrid, Reranker)
+│       ├── workflows/            # LangGraph 工作流
+│       ├── memory/               # 对话记忆 (Redis)
+│       ├── models/               # SQLAlchemy 模型
+│       ├── repositories/         # 数据访问层
+│       ├── services/             # 业务逻辑层
+│       ├── api/                  # FastAPI 路由
+│       ├── core/                 # 配置、日志、依赖注入
+│       ├── schemas/              # Pydantic Schema
+│       ├── utils/                # 工具函数
+│       └── tests/                # 单元测试
+├── frontend/                     # 前端应用（对应模板 src/）
 │   └── src/
-│       ├── components/    # Vue 组件
-│       ├── views/         # 页面视图
-│       ├── stores/        # Pinia 状态管理
-│       └── services/      # API 调用
-├── docs/                  # 项目文档
-├── docker-compose.yml     # 开发环境
-├── docker-compose.prod.yml
-├── .env.example           # 环境变量模板
-└── LICENSE
+│       ├── components/           # Vue 组件
+│       ├── views/                # 页面视图
+│       ├── stores/               # Pinia 状态管理
+│       └── services/             # API 调用
+├── eval/                         # 评估框架
+│   ├── evaluate.py               # 评估脚本
+│   └── test_set.jsonl            # 测试用例集
+├── nginx/                        # Nginx 配置
+├── scripts/                      # 启动脚本
+├── docker-compose.yml            # 开发环境
+├── docker-compose.prod.yml       # 生产环境
+├── .env.example                  # 环境变量模板
+├── .gitignore
+├── LICENSE                       # MIT 开源协议
+└── README.md
 ```
 
 ## 环境搭建
