@@ -20,40 +20,10 @@ async def reflection_agent(state: RAGState) -> dict:
     if not reranked:
         passed = False
         result = "No documents retrieved"
-    elif len(reranked) >= 3:
-        # Use LLM to evaluate relevance for sufficient document count
-        try:
-            llm = get_llm()
-            doc_summaries = "\n".join(
-                f"[{i+1}] {doc.get('content', '')[:150]}"
-                for i, doc in enumerate(reranked[:5])
-            )
-            prompt = f"""判断以下检索结果是否与用户问题相关。
-
-用户问题：{query}
-
-检索结果：
-{doc_summaries}
-
-返回JSON格式：
-{{"passed": true/false, "reason": "判断理由"}}
-
-只返回JSON，不要其他内容。"""
-
-            response = await llm.ainvoke(prompt)
-            eval_text = _extract_text(response.content)
-            eval_result = json.loads(eval_text)
-            passed = eval_result.get("passed", True)
-            result = eval_result.get("reason", "LLM evaluation completed")
-        except Exception as e:
-            logger.warning("reflection_llm_failed", error=str(e))
-            # Fallback to count-based evaluation
-            passed = True
-            result = f"LLM evaluation failed, auto-passed with {len(reranked)} documents"
     else:
-        # Few documents - still pass but with warning
+        # Skip LLM evaluation for speed - trust the reranker
         passed = True
-        result = f"Auto-pass: {len(reranked)} documents retrieved (few but acceptable)"
+        result = f"Auto-pass: {len(reranked)} documents retrieved"
 
     # Determine if retry is needed
     should_retry = not passed and retry_count < settings.MAX_RETRY_COUNT

@@ -8,6 +8,7 @@ def test_rag_state_keys():
         "reflection_result", "reflection_passed", "retry_count",
         "final_answer", "citations", "chat_history",
         "conversation_id", "message_id", "workflow_trace",
+        "user_id",
     }
     annotations = RAGState.__annotations__
     assert expected_keys == set(annotations.keys())

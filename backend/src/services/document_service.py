@@ -97,6 +97,9 @@ async def process_document_upload(session: AsyncSession, document_id: int) -> di
 
 
 async def delete_document(session: AsyncSession, document_id: int) -> bool:
+    from sqlalchemy import delete as sa_delete
+    from src.models.retrieval import Citation
+
     doc_repo = DocumentRepository(session)
     chunk_repo = DocumentChunkRepository(session)
     doc = await doc_repo.get(document_id)
@@ -121,7 +124,11 @@ async def delete_document(session: AsyncSession, document_id: int) -> bool:
     except Exception as e:
         logger.warning("milvus_delete_failed", doc_id=document_id, error=str(e))
 
-    # Remove from PostgreSQL
+    # Delete citations referencing these chunks
+    if chunk_ids:
+        await session.execute(sa_delete(Citation).where(Citation.chunk_id.in_(chunk_ids)))
+
+    # Remove chunks from PostgreSQL
     await chunk_repo.delete_document_chunks(document_id)
     if os.path.exists(doc.file_path):
         os.remove(doc.file_path)

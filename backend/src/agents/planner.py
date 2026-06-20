@@ -37,8 +37,8 @@ def get_llm() -> ChatOpenAI:
         model=settings.LLM_MODEL,
         temperature=settings.LLM_TEMPERATURE,
         max_tokens=settings.LLM_MAX_TOKENS,
-        timeout=60,
-        max_retries=1,
+        timeout=30,
+        max_retries=0,
     )
     return _llm
 
@@ -54,18 +54,18 @@ async def planner_agent(state: RAGState) -> dict:
         history_text = "\n".join([f"{msg.type}: {msg.content}" for msg in chat_history[-6:]])
 
     llm = get_llm()
-    prompt = f"""你是一个查询分析专家。分析用户问题并生成检索计划。
+    prompt = f"""你是一个查询分析和优化专家。分析用户问题，生成检索计划并优化查询。
 
 用户问题：{query}
 
 {f'对话历史：{history_text}' if history_text else ''}
 
-请返回JSON格式的检索计划：
+请返回JSON格式：
 {{
-    "needs_decomposition": true/false,
-    "sub_queries": ["子查询1", "子查询2"],
-    "strategy": "描述检索策略",
-    "key_entities": ["关键实体1", "关键实体2"]
+    "rewritten_query": "优化后的检索查询",
+    "expanded_queries": ["扩展查询1", "扩展查询2"],
+    "strategy": "检索策略",
+    "key_entities": ["关键实体"]
 }}
 
 只返回JSON，不要其他内容。"""
@@ -73,7 +73,6 @@ async def planner_agent(state: RAGState) -> dict:
     try:
         response = await llm.ainvoke(prompt)
         plan_text = _extract_text(response.content)
-        # Try to extract JSON from response (may contain markdown code blocks)
         if "```" in plan_text:
             import re
             json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', plan_text, re.DOTALL)
@@ -82,12 +81,14 @@ async def planner_agent(state: RAGState) -> dict:
         plan = json.loads(plan_text)
     except Exception as e:
         logger.warning("planner_parse_failed", error=str(e))
-        plan = {"needs_decomposition": False, "sub_queries": [query], "strategy": "直接检索", "key_entities": []}
+        plan = {"rewritten_query": query, "expanded_queries": [query], "strategy": "直接检索", "key_entities": []}
 
     logger.info("planner_complete", query=query[:50], plan=plan)
 
     trace_entry = {"step": "planner", "input": query[:100], "output": plan}
     return {
         "retrieval_plan": json.dumps(plan, ensure_ascii=False),
+        "rewritten_query": plan.get("rewritten_query", query),
+        "expanded_queries": plan.get("expanded_queries", [query]),
         "workflow_trace": state.get("workflow_trace", []) + [trace_entry],
     }
